@@ -1,7 +1,7 @@
 "use client";
-console.log("AR Scene starting...");
-import { useEffect, useRef } from "react";
 
+import { useEffect, useRef } from "react";
+import * as BABYLON from "@babylonjs/core";
 import {
     Engine,
     Scene,
@@ -10,9 +10,8 @@ import {
     Vector3,
     SceneLoader,
     Color4,
-    Color3,
     Mesh,
-    WebXRDefaultExperience,
+    MeshBuilder,
 } from "@babylonjs/core";
 
 import "@babylonjs/loaders";
@@ -23,13 +22,11 @@ export default function ARScene() {
     useEffect(() => {
         const canvas = canvasRef.current;
 
-        if (!canvas) {
-            console.log("Canvas not ready yet");
-            return;
-        }
+        if (!canvas) return;
 
         console.log("Canvas found, starting engine");
 
+        // ENGINE
         const engine = new Engine(canvas, true);
 
         engine.setHardwareScalingLevel(
@@ -38,10 +35,12 @@ export default function ARScene() {
                 : 1
         );
 
+        // SCENE
         const scene = new Scene(engine);
 
         scene.clearColor = new Color4(0, 0, 0, 0);
 
+        // CAMERA (fallback non-AR view)
         const camera = new ArcRotateCamera(
             "camera",
             Math.PI / 2,
@@ -53,6 +52,7 @@ export default function ARScene() {
 
         camera.attachControl(canvas, true);
 
+        // LIGHT
         const light = new HemisphericLight(
             "light",
             new Vector3(0, 1, 0),
@@ -61,8 +61,13 @@ export default function ARScene() {
 
         light.intensity = 2.2;
 
+        // MODEL
         let rootMesh: Mesh | null = null;
 
+        // MARKER (for AR placement point)
+        let marker: Mesh | null = null;
+
+        // LOAD MODEL
         SceneLoader.ImportMesh(
             "",
             "/models/",
@@ -76,14 +81,71 @@ export default function ARScene() {
             }
         );
 
+        // =========================
+        // XR SETUP (REAL FIX)
+        // =========================
+        let xr: any;
+
+        const setupXR = async () => {
+            xr = await scene.createDefaultXRExperienceAsync({
+                uiOptions: {
+                    sessionMode: "immersive-ar",
+                },
+                optionalFeatures: true,
+            });
+
+            console.log("XR ready");
+
+            const fm = xr.baseExperience.featuresManager;
+
+            // HIT TEST (SURFACE DETECTION)
+            const hitTest = fm.enableFeature(
+                BABYLON.WebXRHitTest,
+                "latest"
+            );
+
+            console.log("Hit test enabled");
+
+            // CREATE MARKER (visual dot on table)
+            marker = MeshBuilder.CreateSphere(
+                "marker",
+                { diameter: 0.1 },
+                scene
+            );
+
+            marker.isVisible = false;
+
+            // UPDATE MARKER POSITION ON REAL SURFACE
+            hitTest.onHitTestResultObservable.add((results: any) => {
+                if (results.length && marker) {
+                    const hit = results[0];
+
+                    marker.isVisible = true;
+                    marker.position.copyFrom(hit.position);
+                }
+            });
+
+            // TAP TO PLACE LANTERN
+            xr.baseExperience.onScreenTouchEventObservable.add(() => {
+                if (!rootMesh || !marker) return;
+
+                rootMesh.position.copyFrom(marker.position);
+            });
+        };
+
+        setupXR();
+
+        // RENDER LOOP
         engine.runRenderLoop(() => {
             scene.render();
         });
 
+        // RESIZE
         window.addEventListener("resize", () => {
             engine.resize();
         });
 
+        // CLEANUP
         return () => {
             engine.dispose();
         };
