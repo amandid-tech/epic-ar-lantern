@@ -1,5 +1,5 @@
 "use client";
-
+console.log("AR Scene starting...");
 import { useEffect, useRef } from "react";
 
 import {
@@ -21,12 +21,19 @@ export default function ARScene() {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
     useEffect(() => {
-        if (!canvasRef.current) return;
+        if (!canvasRef.current) {
+            console.log("Canvas not ready");
+            return;
+        }
 
         const canvas = canvasRef.current;
 
         // Engine
-        const engine = new Engine(canvas, true);
+        const engine = new Engine(canvas, true, {
+            preserveDrawingBuffer: true,
+            stencil: true,
+            disableWebGL2Support: false,
+        });
 
         engine.setHardwareScalingLevel(
             window.devicePixelRatio > 1
@@ -34,6 +41,9 @@ export default function ARScene() {
                 : 1
         );
 
+        setTimeout(() => {
+            engine.resize();
+        }, 100);
         // Scene
         const scene = new Scene(engine);
 
@@ -115,6 +125,7 @@ export default function ARScene() {
         // Render loop
         engine.runRenderLoop(() => {
             scene.render();
+            console.log("rendering frame");
         });
 
         // Resize
@@ -131,7 +142,13 @@ export default function ARScene() {
     return (
         <canvas
             ref={canvasRef}
-            className="w-screen h-screen touch-none"
+            style={{
+                width: "100vw",
+                height: "100vh",
+                position: "fixed",
+                top: 0,
+                left: 0,
+            }}
         />
     );
 }
